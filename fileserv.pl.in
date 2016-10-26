@@ -1,0 +1,55 @@
+#!@PERL@
+
+##
+# fileserv.pl is a quick perl script to act as a single-file
+# webserver for the webpage status files.  It's useful in the
+# case where you have a separate, protected machine which acts
+# to do network monitoring, and you don't want to run a full
+# webserver on it.
+##
+
+$conf = $ARGV[0];
+if (!$conf) {
+  die "syntax:  $0 <conf file>\n";
+}
+
+open(CONF, $conf) || die "could not open conf file: $!\n";
+
+while (<CONF>) {
+  chomp;
+  if (/outpage +(.*)/) {
+    $statusfile = $1;
+  }
+}
+close(CONF);
+
+if (!$statusfile) {
+  die "error:  configuration file must specify an outpage\n";
+}
+
+chomp($date = `/bin/date -u`);
+($dev, $ino, $mode, $nl, $ui, $gi, $rd, $size, $junk) = stat($statusfile);
+if ($size <= 0) {
+        print "HTTP/1.1 400 File not found\n\n";
+        exit(0);
+}
+
+$filesize = $size;
+
+print<<ENDOFHEADER;
+HTTP/1.1 200 OK
+Date: $date
+Server: Webstatus/1.0
+Last-Modified: $date
+Content-Length: $filesize
+Connection: close
+Content-Type: text/html
+
+ENDOFHEADER
+
+if (!open(STA, $statusfile)) {
+        print "<H1>Status information is not available: $!\n";
+} else {
+        while (<STA>) { print; }
+}
+

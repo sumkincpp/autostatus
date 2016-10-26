@@ -1,0 +1,679 @@
+#!@PERL@
+
+# @configure_input@
+
+use POSIX qw(strftime);
+
+##
+# makestatus - network monitoring program
+#
+# Copyright 1998 David G. Andersen
+#
+# Requires 'fping' to run.
+##
+
+##
+# Configuration Section
+##
+
+$config = $ARGV[0];
+if (!$config) {
+	die "syntax:  $0 <configuration file>\n";
+}
+
+# DEFAULTS.  Don't change them here, change your config file.
+
+# Sensitivity thresholds for notification.
+
+$thresh_down = 3;
+$thresh_maybe = 1;
+$tcptimeout = "10";
+
+# Support for the user-controllable threshhold parameters.
+# Start out with none; e.g. use the defaults
+$thresholds_supplied = 0;
+
+# Support for an external alert program - BETA still.
+$alertprogram = undef; 
+
+# Titles and bears, oh my
+$htmltitle = "Status";
+$msg_up = "is up";
+$msg_maybe = "may be down";
+$msg_down = "is down";
+
+$emailsubject = "netchange";
+$content_subject = 0;
+$one_notify_per_email = 0;  # By default, batch all notifications
+
+# URLs
+
+$img_depfailed = "dep.png";
+$img_harddown = "down.png";
+$img_maybedown = "maybe.png";
+$img_up = "up.png";
+
+# Misc.
+
+$browser_refresh = 87;   # Seconds before auto-reload of browser window
+
+# Debugging is noisy. :-)  Use 'debug on' in the config file to activate.
+$debug = 0;			# 0 or 1, depending on your wishes.
+
+##
+# Read the config file
+##
+
+open(CONFIG, "$config") || die "Could not open config file $config: $!\n";
+
+while (<CONFIG>) {
+	s/#.*//;
+	if (/^statusfile +(.*)/) { $statusfile = $1; }
+	if (/^emerg +(.*)/) { $emerg_contact = $1; }
+	if (/^baseurl +(.*)/) { $baseurl = $1; }
+	if (/^iconurl +(.*)/) { $iconurl = $1; }
+	if (/^headerpic +(.*)/) { $img_header = $1; }
+	if (/^headeralt +(.*)/) { $img_header_alt = $1; }
+	if (/^htmltitle +(.*)/) { $htmltitle = $1; }
+	if (/^hostfile +(.*)/) { $hosts = $1; }
+	if (/^outpage +(.*)/) { $outpage = $1; }
+	if (/^email +(.*)/) { $myaddress = $1; }
+	if (/^fpingflags +(.*)/) { $fpingflags = $1; }
+	if (/^thresh_down +(.*)/) { $thresh_down = $1; }
+	if (/^thresh_maybe +(.*)/) { $thresh_maybe = $1; }
+	if (/^msg_down +(.*)/) { $msg_down = $1; }
+	if (/^msg_maybe +(.*)/) { $msg_maybe = $1; }
+	if (/^msg_up +(.*)/) { $msg_up = $1; }
+	if (/^tcptimeout +(.*)/) { $tcptimeout = $1; }
+	if (/^emailsubject +(.*)/) { $emailsubject = $1; }
+	if (/^debug +on/) { $debug = 1; }
+	if (/^browser_refresh +(\d+)/) { $browser_refresh = $1; }
+	if (/^content_subject +on/) { $content_subject = 1; }
+	if (/^one_notify_per_email +on/) { $one_notify_per_email = 1; }
+	if (/^alertprogram +(.*)/) { $alertprogram = $1; }
+	if (/^custom_thresh +(.*)/) {
+ 	    $thresholds_supplied = 1;
+	    local($threshlevel, $threshname, $threshicon) = split(/,/, $1, 3);
+	    if (defined($threshlevel) && defined($threshname)) {
+	        $threshname =~ s/^ +//;
+	        $thresholds{$threshlevel} = $threshname;
+		if (defined($threshicon)) {
+		    $threshicon =~ s/^ +//;
+		    $threshicons{$threshlevel} = $threshicon;
+		} else {
+		    $threshicons{$threshlevel} = $img_harddown;
+		}
+	    }
+	    else {
+	      $thresholds{$threshlevel} = "$msg_down $thres"; 
+	      $threshicons{$threshlevel} = "$img_harddown";
+	    }
+	}
+}
+
+close(CONFIG);
+ 
+if (!$emerg_contact) { die "Must supply an emergency contact (emerg)\n"; }
+if (!$baseurl) { die "Must supply a baseurl in config file\n"; }
+if (!$iconurl) { die "Must supply an iconurl in config file\n"; }
+if (!$hosts) { die "Must supply a hostfile in config file\n"; }
+if (!$outpage) { die "Must supply an outpage in config file\n"; }
+if (!$statusfile) { die "Must supply a statusfile in config file\n"; }
+
+# Check the thresholds.  If the user didn't supply any, put in our defaults.
+# Otherwise, we'll use what the user told us to use, and NOT use the
+# default (up down maybe) thresholds.
+
+if (!$thresholds_supplied) {
+  $thresholds{0}             = $msg_up;
+  $threshicons{0}            = $img_up;
+
+  $thresholds{$thresh_down}  = $msg_down;
+  $threshicons{$thresh_down}  = $img_harddown;
+
+  $thresholds{$thresh_maybe} = $msg_maybe;
+  $threshicons{$thresh_maybe} = $img_maybedown;
+
+  $thresholds{50}            = "$msg_down 50";
+  $threshicons{50}           = $img_harddown;
+
+  $thresholds{500}           = "$msg_down 500";
+  $threshicons{500}           = $img_harddown;
+}
+
+# Normally, leave this blank.  However, you can use more bandwidth
+# and save some time if you set the parameters correctly.
+# Default is -t2500 -r3 -i25, which means:
+#
+# wait 2500 ms between retries
+# retry three times
+# wait at least 25ms between sending pings.
+
+# $fpingflags = "-t1500 -r3 -i10";
+# These settings reduce my 300 host (~1/2 dead) test file from
+# 1:02 to 0:41.  However, really slow or lossy links will not
+# like these settings.  Uncrowded 128k or better, no problem.
+# (This will send about 4.3k/second)
+# Reducing -i to 10 took the time down further, to 34 seconds.
+# Remember, though, that packet loss will really kill you
+# by forcing retransmissions.
+
+
+##
+# These programs are found automatically by configure;
+# You should not need to modify the values
+##
+
+$tcpcheck = "@prefix@/bin/tcpcheck";
+$ping = "@PING@";
+$fping = "@FPING@";
+$sendmail = "@SENDMAIL@";
+$hostname = "@HOSTNAME@";
+
+
+@hosts = ();			# Holds each service we recognize
+
+$barfonbad = 1;			# 1 = Die on a cycle, 0 = don't die.
+$badgraph = 0;			# Do we have a cycle in the graph?
+
+##
+# Graph notes:
+#  0 = never visited, 1 = visited, 2 = complete
+##
+
+sub graph_DFS_visit {
+    local($host) = $_[0];
+    local($dep);
+    $graph_color{$host} = 1;    # It's been visited now
+    local(@deps) = split(/,/, $DEPEND{$host});
+    foreach $dep (@deps) {
+	if (!$graph_color{$dep}) {
+	    $graph_pi{$dep} = $host;
+	    graph_DFS_visit($dep);
+	}
+	elsif ($graph_color{$dep} == 1 && $barfonbad) {
+	    if (!$badgraph) {
+		print STDERR "Dependency cycle detected between $host and $dep\n";
+		print STDERR "Please fix this problem in the configuration file:\n";
+		print STDERR "   $hosts\n";
+		$badgraph = 1;
+	    }
+	}
+
+    }
+    $graph_color{$host} = 2;
+    push( @ordered_hosts, $host);
+}
+
+# Perform a depth-first search of the graph, ordering the nodes as we do.
+
+sub graph_DFS {
+    local($host);
+    foreach $host (@hosts) {         # init the graph
+	if ($host =~ /^dummy_host/) { next; }
+	$graph_color{$host} = 0;
+	$graph_pi{$host} = 0;
+    }
+    foreach $host (@hosts) {
+	if ($host =~ /^dummy_host/) { next; }
+	if ($graph_color{$host} == 0) {
+	    &graph_DFS_visit($host);
+	}
+    }
+}
+
+sub readhosts {
+    open(HOSTS, "$hosts");
+    while (<HOSTS>) {
+	s/#.*// unless /^%HTML:/;
+	chomp;
+	next if (length($_) < 5);
+
+	# Allow our special HTML entries.
+	
+	if (/^%HTML:/) {
+	    $dummycount++;
+	    $host = "dummy_host_" . $dummycount;
+	    $HTML{$host} = $_;
+	    $HTML{$host} =~ s/^%HTML://;
+	    push(@hosts, $host);
+	    next;
+	}
+	
+	($host, $address, $dependlist, $contact, $explanation) = split(/[\s\t]+/, $_, 5);
+	print "Found host:  $host\n" if $debug;
+	if ($dependlist ne "none") {
+	    $DEPEND{$host} = $dependlist;
+	}
+	$port = $host;
+	$port =~ s/.*://;
+	$CONTACT{$host} = $contact;
+	$ADDRESS{$host} = $address;
+	$MACS{"$address:$port"} = $host;
+	$DESC{$host} = $explanation;
+	push @hosts, $host;	
+    }
+    close(HOSTS);
+}
+
+# Check dependencies.  If a host we're checking depends on something else,
+# and it's down, we don't want to ping it.
+
+sub checkdepend {
+    local($serv) = $_[0];
+    local($servname);
+    $deplist = $DEPEND{$serv};
+    @deps = split(/,/, $deplist);
+    foreach $dep (@deps) {
+	$servname = &getservname($dep);
+	if (($visited{$servname} &&
+	     ($down{$servname} || $depfailed{$servname}))) { return 1; }
+    }
+    return 0;
+}
+
+# Do we have any wait dependencies that would cause us to
+# postpone the next query?
+
+sub wait_depend {
+    local($host) = $_[0];
+    local(@deps) = split(/,/, $DEPEND{$host});
+    local($dep);
+    
+    foreach $dep (@deps) {
+	if (!$visited{$dep}) { return 1; }
+    }
+    return 0;
+}
+
+sub init {
+    chomp($localhostname = `$hostname`);
+    foreach $_ (@hosts) {
+	$servname = &getservname($_);
+	$down{$servname} = 0;
+	$depfailed{$servname} = 0;
+    }
+}
+
+sub getservname {
+    local($_) = $_[0];
+#    s/://;
+    return $_;
+}
+
+# read/write status:  Save our state to a file from which we restore.
+
+sub writestatus {
+    open(OUT, ">$statusfile") || die "Could not open status file\n";
+    foreach $_ (@hosts) {
+	$servname = &getservname($_);
+	$down = $down{$servname};
+	print OUT "$servname $down\n";
+    }
+    close(OUT);
+}
+
+sub readstatus {
+    open(IN, "$statusfile");
+    while (<IN>) {
+	chomp;
+	($servname, $down) = split;
+	$down{$servname} = $down;
+    }
+    close(IN);
+}
+
+##
+# pinghost - determine if a host is down via ICMP messages
+##
+
+sub pinghost { 
+    local($host) = @_;
+    local($remaddr) = $ADDRESS{$host};
+
+    if ($FSTAT{$remaddr} == 2) {
+	$down{$host}++;
+    } else {
+	$down{$host} = 0;
+    }
+}
+
+#
+# tcphost - performs the checkservice test
+#
+
+sub tcphost { 
+    local($hostup) = 0; 
+    local($_) = @_;
+    local($host, $port) = split(/:/);
+    
+    print "tcphost: ($_) host $host port $port\n" if $debug;
+
+    if ($FSTAT{$_} == 2) {
+	$down{$_}++;
+    } else {
+	$down{$_} = 0;
+    }
+}
+
+sub checkit {
+    local($checkwhat) = $_[0];
+    if ($checkwhat =~ /:/) {
+	&tcphost($checkwhat);
+    } else {
+	&pinghost($checkwhat);
+    }
+}
+
+sub pingbatch {
+    local(@addrlist) = @_;
+
+    return if ($#addrlist == -1);
+    
+    if (! -f "$fping") {
+        fatal_error("$fping is not installed\n");
+    }
+    if (! -x "$fping") {
+        fatal_error("$fping is not executable\n");
+    }
+    open(FPING, "$fping $fpingflags @addrlist|") ||
+	fatal_error("Could not fork fping: $!\n");
+
+    while (<FPING>) {
+	chomp;
+	local($machine, $is, $state) = split;
+	if ($state eq "alive") {
+	    $FSTAT{$machine} = 1;
+	} else {
+	    $FSTAT{$machine} = 2;
+	}
+    }
+    close(FPING);
+}
+
+sub tcpbatch {
+    local(@addrlist) = @_;
+
+    return if ($#addrlist == -1);
+    if (! -f "$tcpcheck") {
+        fatal_error("$tcpcheck is not installed\n");
+    }
+    if (! -x "$tcpcheck") {
+        fatal_error("$tcpcheck is not executable\n");
+    }
+    open(TCPPING, "$tcpcheck $tcptimeout @addrlist|") ||
+        fatal_error("Could not fork tcpcheck: $!\n");
+
+    while (<TCPPING>) {
+	chomp;
+	local($addr, $is, $state) = split;
+	$machine = $MACS{$addr};
+	if ($state eq "alive") {
+	    print "$machine ($addr) is tcp-alive\n" if $debug;
+	    $FSTAT{$machine} = 1;
+	} else {
+	    print "$machine ($addr) is tcp-dead\n" if $debug;
+	    $FSTAT{$machine} = 2;
+	}
+    }
+    close(TCPPING);
+}
+
+############################ Main 
+# actually do the deed.
+#
+
+&readhosts();			# Set things up
+&init();
+
+&graph_DFS();			# Compute our ordered tree.
+
+if ($badgraph) {		# Barf if the tree is cyclic.
+    exit(-1);
+}
+
+&readstatus();
+
+
+##
+# So, now we change our mind to ping them all at once, and
+# then handle the TCP stuff later.
+##
+
+$hostlen = $#ordered_hosts;
+for ($i = 0; $i <= $hostlen; $i++) {
+    $host = $ordered_hosts[$i];
+    if (&checkdepend($host)) {
+	$servname = &getservname($host);
+	$depfailed{$servname} = 1;
+	$visited{$host} = 1;
+	print "Skipping host for dependency:  $host\n" if $debug;
+    } else {
+	if (!&wait_depend($host)) {   # If the things it depends on have been visited
+	    push(@checklist, $host);
+	    print "Wait depend OK for host: $host\n" if $debug;
+	} else {
+	    &check_batch(@checklist);
+	    undef(@checklist);
+	    $i--;
+	}
+    }
+}
+
+&check_batch(@checklist);  # Catch the stragglers.
+
+&writestatus();
+&printpage();
+&sendnotify();
+
+#### DONE #####################
+
+sub check_batch {
+    local(@hosts) = @_;
+    local($host);
+    local(@addrlist);
+    local($addr);
+    local(@tcplist) = ();
+
+    foreach $host (@hosts) {
+	$addr = $ADDRESS{$host};
+	if ($host =~ /:/) {
+	    $port = $host;
+	    $port =~ s/.*://;
+	    push(@tcplist, "$addr:$port");
+	} else {
+	    push(@addrlist, $addr);
+	}
+    }
+
+    
+    print "Checking batch:  @hosts\n" if $debug;
+
+    # Fping all of the hosts at once, record the results in FSTAT
+    &pingbatch(@addrlist);
+    &tcpbatch(@tcplist);
+
+    foreach $host (@hosts) {
+	&checkonehost($host);
+    }
+}
+
+sub sendnotify {
+    local(@people) = keys(%MESSAGE);
+    local($person);
+    my($themes);
+    foreach $person (@people) {
+	next if $person eq "nobody";
+
+	if ($one_notify_per_email) {
+	  @meslines = split(/\n/, $MESSAGE{$person});
+	  foreach $line (@meslines) {
+	    open(MAIL, "|$sendmail $person") || die "Could not send mail: $!\n";
+	    print MAIL "From: $myaddress\n";
+	    print MAIL "Subject: $line\n\n";
+	    print MAIL "$line\n";
+	    close(MAIL);
+	  }
+	} else {
+	  if ($content_subject) {
+	    @meslines = split(/\n/, $MESSAGE{$person});
+	    $thesub = shift @meslines;
+	    foreach $line (@meslines) {
+	      $themes .= "$line\n";
+	    }
+	  } else {
+	    $themes = $MESSAGE{$person};
+	    $thesub = $emailsubject;
+	  }
+	  
+	  open(MAIL, "|$sendmail $person") || die "Could not send mail: $!\n";
+	  print MAIL "From: $myaddress\n";
+	  print MAIL "Subject: $thesub\n";
+	  print MAIL "\n";
+	  print MAIL $themes . "\n";
+	  close(MAIL);
+	}
+    }
+}
+
+sub checkonehost {
+    local($host) = $_[0];
+    local($oldval) = $down{$host};
+    local($servname) = &getservname($host);
+    local($status);
+
+    print "Checking:  $host\n" if $debug;
+
+    &checkit($host);
+    local($st) = $down{$host};
+
+    if (($st || $oldval) && defined($thresholds{$st})) {
+	local($contactperson) = $CONTACT{$host};
+	local(@conpeople) = split(/,/, $contactperson);
+
+        $status = $thresholds{$st};
+
+	# Build the message here, send them all later.
+	foreach $contactperson (@conpeople) {
+	    $MESSAGE{$contactperson} .= "$host $status\n";
+	}
+	# Beta of the external alert program functionality
+	if (defined($alertprogram)) {
+	    system("$alertprogram \"$host\" \"$st\" \"$status\" \"$oldval\"");
+	}
+    }
+    $visited{$host} = 1;
+}
+
+#
+# Dump the results to the HTML page
+#
+
+sub printpage {
+
+    # First, calculate some stats
+    $hostcount = 0;
+    foreach $host (@hosts) {
+	next if ($host =~ /^dummy_host/);
+	$hostcount++;
+	$stat = $down{&getservname($host)};
+	if ($depfailed{&getservname($host)}) { $h_dep++; }
+	elsif ($stat >= $thresh_down) {$h_down++;}
+	elsif ($stat >= $thresh_maybe) {$h_maybe++;}
+	else {$h_ok++;}
+    }
+
+    # Format of expire:  Tue, 01 Aug 2000 23:09:02 EDT
+    local($timenow) = time() + $browser_refresh;
+    $expire = strftime "%a, %d %b %Y %T %Z", gmtime($timenow);
+    open(OUT, ">$outpage.tmp");
+    print OUT "<HTML><head><title>$htmltitle</title>\n";
+    if ($browser_refresh > 0) {
+      print OUT "<META HTTP-EQUIV=\"Refresh\" CONTENT=$browser_refresh>\n";
+    }
+    print OUT "<META HTTP-EQUIV=\"Expires\" CONTENT=\"$expire\">\n";
+    print OUT "</head>\n";
+    print OUT "<body bgcolor=\"#ffffff\">\n";
+    print OUT "<img src=\"$img_header\" ALT=\"$img_header_alt\">\n" if $img_header;
+    print OUT "<H1>$htmltitle</h1>\n";
+    if ($h_ok < $hostcount) {
+	$font = "<font color=\"#ff0000\">";
+    } else {
+	$font = "<font color=\"#00ff00\">";
+    }
+
+    printf(OUT "<h2>%d up, ", $h_ok);
+    printf(OUT "<font color=\"#%s\">%d possibly down,</font> ",
+	   ($h_maybe == 0) ? "000000" : "ff0000", $h_maybe);
+
+        printf(OUT "<font color=\"#%s\">%d down,</font> ",
+	   ($h_down == 0) ? "000000" : "ff0000", $h_down);
+
+        printf(OUT "<font color=\"#%s\">%d unreachable</font> ",
+	   ($h_dep == 0) ? "000000" : "ff0000", $h_dep);
+    print OUT "</h2>\n";
+    $now_string = gmtime;
+    print OUT "Last updated: " . $now_string;
+    print OUT "<P>\n";
+
+    # print the key
+    print OUT "<B>Key: </B><BR>\n";
+    print OUT "<img src=\"$iconurl/$img_up\" alt=\"$alt_up\"> - Up<BR>\n";
+    print OUT "<img src=\"$iconurl/$img_maybedown\" alt=\"$alt_maybedown\"> - Possibly down<BR>\n";
+    print OUT "<img src=\"$iconurl/$img_harddown\" alt=\"$alt_harddown\"> - Very down<BR>\n";
+    print OUT "<img src=\"$iconurl/$img_depfailed\" alt=\"$alt_depfailed\"> - Path dependency failed (could not reach it due to other failure)<BR>\n";
+    
+    print OUT "<P>\n";
+    print OUT "<table><tr><td><B>Address</B></td><td><B>Status</B></td>\n";
+    print OUT "<TD><B>Notes</B></TD></tr>\n";
+
+    # Compute the thresholds, listed in order of greatest to smallest.
+    my(@threshlist) = keys(%thresholds);
+    @threshlist = sort { $b <=> $a} @threshlist;
+
+    foreach $host (@hosts) {
+	if ($host =~ /^dummy_host/) {
+	    print OUT $HTML{$host};
+	    next;
+	}
+	$servname = &getservname($host);
+	$stat = $down{$servname};
+	if ($depfailed{$servname}) {
+	    $img = $img_depfailed;
+	    $alt = $alt_depfailed;
+	} else {
+	    $threshfound = 0;
+ 	    foreach $thresh (@threshlist) {
+	        if ($stat >= $thresh) {
+		    $threshfound = 1;
+		    $img = $threshicons{$thresh};
+		    $alt = $thresholds{$thresh};
+		    last;
+		}
+	    }
+	    if (!$threshfound) {
+	        $img = $img_up;
+	        $alt = "is up";
+	    }
+	}
+	$desc = $DESC{$host};
+	print OUT "<tr><Td>$host</td><td><img alt=\"$alt\" src=\"$iconurl/$img\"></td><td>$desc</td></tr>\n";
+    }
+    print OUT "</table>\n";
+    print OUT "</body>\n</HTML>\n";
+    close(OUT);
+    rename ("$outpage.tmp", "$outpage");
+} 
+
+
+sub fatal_error {
+    local($msg) = $_[0];
+    open(MAIL, "|$sendmail $emerg_contact") || 
+          die "Doubly fatal error - could not mail $emerg_contact\n";
+    print MAIL "Subject:  autostatus emergency\n";
+    print MAIL "\n";
+    print MAIL "An emergency with autostatus occured:\n";
+    print MAIL "$msg\n";
+    close(MAIL);
+    die $msg;
+}

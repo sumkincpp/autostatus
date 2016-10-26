@@ -1,0 +1,60 @@
+Changes since version 1.2 beta 1:
+  - Fixed autoconf lib and struct sin_len tests to work more reliably
+    and to work on IRIX (Petter Reinholdts patches).
+  - Changed GIFs to PNGs, changed default to use pngs
+
+Changes since version 1.1.4:
+  - Now version 1.2 beta
+  - Added TODO to documentation.  Releasing 'devrelease' as well.
+  - Makefile cleanup to handle different versions.
+  - Added beta of alertprogram (Ewan McNeill patch)
+  - Added user-configurable thresholds, and rewrote the internal
+    threshold handling to make use of it and clean things up.
+    this is the custom_thresh configuration item.
+    (Ewan McNeill patch for the thresholds).
+  - Rewrote the webpage output handling to allow the configurable
+    thresholds.  Added an optional icon specifier to the user-configurable
+    thresholds.
+
+Changes since version 1.1.3:
+  - Added one_notify_per_email configuration option
+    (you'll get one message for each event).  (Anssi Alaranta suggestion)
+  - Fixed bug in tcpcheck status reporting which was causing some
+    notification failures or duplicates.  (Anssi and Steve Sawaya)
+  - Updated pointer to the proper fping source, tested with
+    the latest fping (2.2b1 as of 6/2/1999).
+  - Added </BODY> and </HTML> to the output HTML. (Nate Carlson)
+  - Added headeralt conf. option to specify alt= text for the header image
+  - Split changes into NEWS file
+  - Rewrote the main configuration section of the README.
+
+Changes since version 1.1.2:
+  - Added option to send the event as the subject (Steve Sawaya suggestion)
+  - Added option for configurable email subject (Ewen McNeill patch)
+
+Changes since version 1.1.1:
+  - Added configuration for the up/down/maybe messages
+  - Added emergency contact in case of a fatal error (like
+    a missing fping or tcpcheck).
+
+Changes since version 1.1:
+  - Fixed silly problem with page title.  Added 'htmltitle' parameter.
+  - Fixed last-minute typo in 'configure' script.
+  - Added alternate icons which provide shape cues.
+
+Changes since version 1.0:
+  - Autoconf'd for portability
+    + Tested on:
+          FreeBSD 2.5 and 3.0
+	  Linux 2.0
+          Solaris (SunOS 5.5)
+	  HPBSD 2.0 (a local Utah thing)
+	  HPUX 10.2
+    - Doesn't work on:
+	  HPUX 9.0
+	  AIX 4.1  (both have non-posix selects).
+  - Now takes a configuration file, so you don't need to modify the
+    script for an installation.
+  - Provides a 'make install' target to simplify installation.
+  - fileserv.pl groks configuration files, too.
+  - Supports building only 'tcpcheck' (supply --without-perl).

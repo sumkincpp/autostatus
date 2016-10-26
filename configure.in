@@ -1,0 +1,129 @@
+dnl
+dnl Autoconf script for 'autostatus'
+dnl 
+dnl Process this file with autoconf to produce a configure script.
+dnl
+dnl Copyright (C) 1998 David G. Andersen
+
+
+AC_INIT(tcpcheck.c)
+AC_CONFIG_HEADER(config.h)
+
+dnl
+dnl Check if we need the sin_len in a struct sockaddr_in
+dnl
+
+dnl AC_DEFUN(DA_STRUCT_SINLEN,
+dnl [
+dnl   AC_CACHE_CHECK(for sockaddr.in_sin_len, da_has_struct_sinlen,
+dnl     AC_EGREP_HEADER(sin_len, netinet/in.h, AC_DEFINE(DA_HAS_STRUCT_SINLEN))
+dnl   )
+dnl ])
+
+dnl
+dnl Check if we need the sin_len in a struct sockaddr_in.  More reliable
+dnl than AC_EGREP_HEADER (so it works under IRIX).
+dnl
+
+AC_DEFUN(DA_STRUCT_SINLEN,
+[
+   AC_CACHE_CHECK(for sockaddr_in.sin_len, da_has_struct_sinlen,
+      AC_TRY_COMPILE(
+        [#include <unistd.h>
+         #include <sys/time.h>
+   	 #include <sys/socket.h>
+ 	 #include <netinet/in.h>],
+	[
+          struct sockaddr_in addr;
+	  addr.sin_len = sizeof(struct sockaddr_in);],
+	[da_has_struct_sinlen=yes
+	 AC_DEFINE(DA_HAS_STRUCT_SINLEN)],
+        da_has_struct_sinlen=no))
+])
+
+dnl
+dnl A better check lib.  The default AC_CHECK_LIB does not check to
+dnl see if the function is already present.  This first checks for
+dnl the presence of the function, and if it's not found, then checks
+dnl the library for it.
+dnl
+
+AC_DEFUN(DA_CHECK_LIB,
+[AC_CHECK_FUNCS($2)
+ if test "$ac_cv_func_$2" = "no"; then
+    AC_CHECK_LIB($1, $2, [ac_cv_func_$1=yes
+			  LIBS="-l$1 $LIBS"]
+    )
+ fi])
+
+
+dnl Stolen from David Mazieras (dm@lcs.mit.edu)
+
+dnl
+dnl Find perl
+dnl
+AC_DEFUN(SFS_PERLINFO,
+[AC_ARG_WITH(perl,
+--with-perl=PATH          Specify perl executable to use
+--without-perl            Build only tcpcheck and not autostatus
+[
+case "$withval" in
+        no) TCPONLY="true" ;;
+	yes|"") ;;
+        *) PERL="$withval" ;;
+esac],
+[
+case "$withval" in
+	no) TCPONLY="true" ;;
+	*) ;;
+esac])
+
+if test "$TCPONLY" = "true"
+then
+  echo "Configuring to build only tcpcheck"
+else
+  if test -z "$PERL" || test ! -x "$PERL"
+  then
+     AC_PATH_PROGS(PERL, perl5 perl)
+  fi
+  if test -x "$PERL" && $PERL -e 'require 5'; then :; else
+          AC_MSG_ERROR("Can\'t find perl 5 or later")
+  fi
+  AC_SUBST(PERL)
+fi
+])
+
+
+
+dnl Check for important programs, like the C compiler and perl
+AC_PROG_CC
+AC_PROG_CPP
+AC_PROG_INSTALL
+
+dnl
+dnl If we don't have perl, then we're not going to need
+dnl the exterior programs either.  e.g. the tcpcheck only
+dnl case.
+
+SFS_PERLINFO
+
+dnl
+dnl Find stuff tcpcheck needs
+dnl
+
+DA_STRUCT_SINLEN
+DA_CHECK_LIB(ns, gethostbyname)
+DA_CHECK_LIB(socket, socket)
+if test "$TCPONLY" = "true"
+then
+  echo "Skipping program checks.  The autostatus program will not work"
+else
+  AC_PATH_PROG(SENDMAIL, sendmail, /usr/sbin/sendmail,
+               $PATH:/usr/sbin:/usr/lib:/etc?usr/etc)
+  AC_PATH_PROG(HOSTNAME, hostname, /bin/hostname, $PATH:/bin:/usr/bin)
+  AC_PATH_PROG(PING, ping, /sbin/ping, $PATH:/sbin:/usr/sbin:/bin:/usr/bin)
+  AC_PATH_PROG(FPING, fping, /usr/local/bin/fping,
+        $PATH:/sbin:/usr/sbin:/bin:/usr/bin:/usr/local/bin:/usr/local/sbin)
+fi
+AC_OUTPUT(Makefile autostatus fileserv.pl)
+

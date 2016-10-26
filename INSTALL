@@ -1,0 +1,67 @@
+0 - Make sure perl 5.0 or later is installed.
+    Make sure 'fping' is installed.  Must be setuid root
+    if autostatus is run as a non-root user.  (Don't run it
+    as root).
+
+    fping may be obtained from:
+
+    ftp://ftp.stanford.edu/pub/packages/fping
+    with docs at:  http://www.stanford.edu/~schemers/docs/fping/fping.html
+
+1 - Run the "configure" script.  This will find the location
+    of various programs, etc.
+
+    o  Full configure semantics apply if you wish to change things.
+
+    o  To install in a different location, supply --prefix=/other/location
+       (such as --prefix=/usr/local/, which will cause the files to be
+       installed in /usr/local/bin, /usr/local/share, etc).
+
+    o  If you wish to build only tcpcheck, configure with --without-perl
+
+
+2 - Type "make"
+
+2a - type "make install"
+
+3 - Create a configuration file containing the pathnames
+    for important files.
+
+3 - Create a "hosts" file (based on hosts.sample) containing
+    your hosts, routers, and services to monitor.
+   
+4 - Create a cron entry which runs autostatus every now and then.
+    Invoke as:
+
+    autostatus <configuration file name>
+
+    I use an entry like:
+
+    1-59/5  *  *  *  *  /usr/local/bin/autostatus /home/danderse/as/local.cfg
+
+5 - Install the icons you wish to use (see the icons directory for
+    more information) in a web-accessible location.
+
+6 - [OPTIONAL]
+
+  If you do not run a webserver on the machine doing the monitoring,
+  (and you don't have the status results written out to a public
+   place where it can be read by your webserber), you may wish to run
+   the fileserv.pl script.  To do so, set it up in inetd:
+
+    http stream tcp nowait <user> <path> <path> <path-to-html-file>
+
+  where <user> is a user who can read the HTML file, but has no
+  special permissions.  I suggest 'nobody' if at all possible.
+  DO NOT USE ROOT FOR THE USER.
+
+  <path> is the path to the fileserv.pl script
+
+  <path-to-conf-file> is the path to the configuration file with which
+  autostatus is invoked.  Fileserv will read the location of the 'outfile'
+  from this file, and display its contents.
+
+  If you use fileserv, you'll need to specify a different icon path
+  in your configuration file, since fileserv will only serve up
+  ONE page, the status html page.
+

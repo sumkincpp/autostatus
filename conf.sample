@@ -1,0 +1,8 @@
+statusfile /home/danderse/autostatus/local.status
+hostfile /home/danderse/autostatus/local.hosts
+baseurl http://www.cs.utah.edu/~danderse/autostatus
+iconurl http://www.cs.utah.edu/~danderse/autostatus/icons
+outpage /home/danderse/public_html/autostatus/local.html
+email danderse@cs.utah.edu
+emerg danderse@cs.utah.edu
+content_subject on

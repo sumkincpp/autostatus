@@ -1,0 +1,71 @@
+SHELL = /bin/sh
+VERSION=1.2
+
+srcdir = @srcdir@
+VPATH = @srcdir@
+top_srcdir = @top_srcdir@
+prefix = @prefix@
+exec_prefix = @exec_prefix@
+
+bindir = @bindir@
+sbindir = @sbindir@
+libexecdir = @libexecdir@
+datadir = @datadir@
+sysconfdir = @sysconfdir@
+sharedstatedir = @sharedstatedir@
+localstatedir = @localstatedir@
+libdir = @libdir@
+infodir = @infodir@
+mandir = @mandir@
+includedir = @includedir@
+oldincludedir = /usr/include
+
+DISTDIR =
+
+CC = @CC@
+CFLAGS = @CFLAGS@
+CFLAGS += -I.
+DEFS = @DEFS@
+
+LIBS = @LIBS@
+
+top_builddir = .
+INSTALL = @INSTALL@
+INSTALL_PROGRAM = @INSTALL_PROGRAM@
+INSTALL_DATA = @INSTALL_DATA@
+
+CC = @CC@
+PERL = @PERL@
+
+CLEANFILES = core *.core *.o
+DOCS = README INSTALL NEWS TODO
+
+all: tcpcheck
+
+tcpcheck: tcpcheck.o
+	$(CC) tcpcheck.o -o tcpcheck ${LIBS}
+
+clean:
+	rm -f ${CLEANFILES}
+install: all
+	${INSTALL} -d -m 755 ${bindir}
+	${INSTALL} -m 555 tcpcheck autostatus fileserv.pl ${bindir}
+
+release:
+	mkdir autostatus-${VERSION}
+	cp config.h.in *.c configure ${DOCS} *.sample Makefile.in autostatus.in fileserv.pl.in install-sh autostatus-${VERSION}
+	mv icons autostatus-${VERSION}
+	tar -cvf autostatus-${VERSION}.tar autostatus-${VERSION}
+	mv autostatus-${VERSION}/icons ./
+	rm -rf autostatus-${VERSION}
+	gzip autostatus-${VERSION}.tar
+
+devrelease:
+	mkdir autostatus-${VERSION}
+	cp *.c *.in configure ${DOCS} acconfig.h install-sh *.sample autostatus-${VERSION}
+	mv icons autostatus-${VERSION}
+	tar -cvf autostatus-${VERSION}.dev.tar autostatus-${VERSION} 
+	mv autostatus-${VERSION}/icons ./
+	rm -rf autostatus-${VERSION}
+	gzip autostatus-${VERSION}.dev.tar
+

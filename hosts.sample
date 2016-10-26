@@ -1,0 +1,41 @@
+##
+# Format:
+#
+# name	address	depend,list	contact	description
+#
+# NOTE:  For now, proper dependency handling requires that important services
+#        get listed.  I didn't feel like solving the graph problem associated
+#	 with this as well.  Maybe later.
+#
+# Name is just a name you assign to it.  If the name is specified
+# as name:service, the TCP service is checked instead of the host.
+# If just a name is supplied, the host is 'ping'd to see if it is
+# alive.
+#
+# The dependency list is a list of things which must be alive in
+# order for this machine or service to be checked.
+#
+# Contact is an email address which is mailed if the status
+# of the host changes.
+##
+
+#
+# Routers
+#
+
+%HTML: <TR><td colspan=3><font size="+1"><B>Routers</font></b></TR>
+mygw mygw none me@my.domain This is our main gateway
+
+#
+# Servers
+#
+
+%HTML: <TR><td colspan=3><font size="+1"><B>Servers</font></b></TR>
+yahoo	www.yahoo.com	mygw	me@my.domain	Is Yahoo! Alive?
+
+#
+# Services
+#
+
+yahoo:http	www.yahoo.com	yahoo	me@my.domain	Is Yahoo! serving?
+

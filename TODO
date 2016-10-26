@@ -1,0 +1,29 @@
+Soon changes:
+
+* Bundle 'fping' if necessary.
+  (does 'fping' support autoconf?  perhaps autoconfify it)
+
+* Test on more platforms (sgi, more Linux systems?).
+
+* Add a --with-fping option to configure in case fping is
+  installed in a non-standard location.  Configure should
+  warn the user if fping was not located.
+
+* Update the icons list dynamically if the user overrides the
+  list of supplied icons via the custom_thresh directive.
+  (More additions may be necessary to really make the
+  custom_thresh directive complete).
+
+* How's the documentation?  It's been rewritten.
+
+Eventual goals:
+
+* Add a history logging file, and write a quick stats parser for
+  it to generate uptime information.
+
+* Long time off:  Uptime graphs via gd or the mrtg graphing interface.
+
+* Anyone want to contribute a graphical front-end?  I'm not convinced
+  it's necessary, but it might be neat to at least have an output
+  visualizer using some of the berkeley ns network visualization
+  tools.

@@ -1,0 +1,16 @@
+The default icon names are:
+
+up.gif    - life is happy
+down.gif  - life is definitely down.
+maybe.gif - life may be down
+dep.gif   - I couldn't reach it because of a path failure
+
+The default icons are simply colored spheres, but I've provided
+some alternates which provide shape cues as well:
+
+   stop.gif (a diamond, actually, so it's easier to see) for "down.gif"
+   bluesquare.gif (a square for "may be down")   
+   yield.gif (a triangle for "path failure")
+
+Simply rename these, or any other images you prefer, to the
+appropriate name, and you'll be set.

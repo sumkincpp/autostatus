@@ -1,0 +1,12 @@
+/* config.h.in.  Generated automatically from configure.in by autoheader.  */
+
+/*
+ * Do we have a sin_len in struct sockaddr_in?
+ */
+#undef DA_HAS_STRUCT_SINLEN
+
+/* Define if you have the ns library (-lns).  */
+#undef HAVE_LIBNS
+
+/* Define if you have the socket library (-lsocket).  */
+#undef HAVE_LIBSOCKET

@@ -1,0 +1,281 @@
+Autostatus v 1.2.1
+
+ * Introduction
+ * Configuration
+ * Acknowledgements
+ * Copyright (standard BSD copyright)
+
+INTRODUCTION
+------------
+
+Autostatus is designed to monitor a network of computers and provide
+feedback in the form of a status web page, and email/pager
+announcements of changes.  The primary design goal with Autostatus is 
+efficiency (it tries to do what it does as quickly as possible).
+
+Quick guide to use:
+	* Read INSTALL, it's brief.
+	* (./configure && make, then edit makestatus and set config. vars)
+	* Put makestatus in your cron.
+
+Requires:
+	* fping (must be setuid).
+	* sendmail
+	- [optional] fileserv.pl for serving the status file if
+	  you aren't running a webserver.
+	
+
+FEATURES
+--------
+Autostatus is a network and server monitoring program.  It is designed
+to support large, arbitrarily complex networks of computers, and still
+provide feedback in a very timely fashion.
+
+The goals of autostatus are to be fast, efficient (scalable), and
+accurate, while remaining easy to configure and run.
+
+Some features autostatus supports:
+
+	* Dependency Resolution:
+	* Parallel status gathering
+	* Status Web Page
+	* Email notification
+
+For more information about autostatus, see its web page at:
+
+	http://www.angio.net/consult/autostatus/
+
+CONFIGURATION
+-------------
+Configuring autoconf is relatively simple.  There are two configuration files
+you'll need to set up:
+
+	* the main configuration file
+	* the hosts configuration file
+
+The main configuration file is the filename passed to autostatus when
+you run it.  This file specifies the location of resources it needs
+(like the hosts configuration file, the status file, etc).  The hosts
+configuration file lists the hosts to be monitored, and small hints
+for formatting the output.
+
+A basic configuration file may look like this.  We'll assume that
+you've created a directory /usr/local/status to hold your autostatus
+files, but you could put this information anywhere.  In addition,
+you've installed the autostatus icons in a directory which is accessed
+as /icons on your webserver.
+
+hostfile /usr/local/status/hosts
+statusfile /usr/local/status/statusfile
+outpage /home/webserver/status/index.html
+baseurl http://www.example.com/status/
+iconurl http://www.example.com/icons/
+headerpic http://www.example.com/yourlogo.gif
+email you@example.com
+emerg you@example.com
+content_subject on
+
+The meaning of each of the items listed here is discussed below.
+
+Main configuration file directives:
+
+  --- Path configuration items:
+
+	hostfile <path>    :  specifies the pathname to the hostfile
+
+	statusfile <path>  :  specifies the path to a file where autostatus
+			      can remember the status of the hosts it monitors.
+			      (don't create this file - autostatus will do so).
+
+	outpage <path>     :  Specifies the pathname for the file where
+			      autostatus will output its HTML status page.
+			      (usually in a web-accessible location).
+
+	alertprogram <path> : [Totally optional, BETA]
+				The path to an external program which
+				will be run when something's status
+				changes.  It is passed four arguments,
+				the host, the numeric status, the
+				status message, and the previous status.
+				If not present, no program is run.
+				Mail is sent in any case.
+
+   --- Web page configuration items:
+
+	baseurl <url>      :  Specifies the http URL for the directory
+			      where autostatus's page can be accessed.
+			      (the path where the outpage is accessed).
+
+	iconurl <url>      :  Specifies the http URL for the directory
+			      where the autostatus icons are installed.
+
+	headerpic <url>    :  Specifies the http URL for an image to
+			      display at the top of the status page.
+
+	headeralt <text>   :  Specifies the ALT= text for the header
+			      picture, which is displayed if a web
+			      browser does not display images.
+
+	browser_refresh #  :  How many seconds before the browser
+			      auto-refreshes.  Default is 87 seconds.
+			      Set to 0 (zero) for no auto-refresh.
+
+   --- Output email configuration items:
+
+	msg_up <text>      :  The text message sent in email when a
+			      host or service comes back online.
+
+			      default:  is up
+
+	msg_maybe <text>   :  The text message sent in email when a
+			      host or service is potentially down.
+
+			      default: may be down
+
+	msg_down <text>    :  The text message sent in email when a
+			      host or service is confirmed down.
+
+			      default: is down
+
+	emailsubject <text> : configure a different email subject.
+			      
+			      default:  netchange
+
+	content_subject <on> : If enabled, then the subject of the
+			       email will be the first event in the
+			       list of events, such as "blah is down".
+			       Very handy, and very recommended.
+
+			      default:  off
+
+	one_notify_per_email <on> : If enabled, then autostatus will
+				    send one email for _each_ state change
+				    which occurs, instead of batching all
+				    concurrent changes into a single
+				    message.  (Handy with some pagers).
+
+				    default: off
+
+   --- Service and host checking configuration:
+
+	fpingflags <flags> :  A list of flags to fping.  (see below).
+
+	tcptimeout <num>   :  The number of seconds before a TCP
+			      service is deemed unresponsive.
+
+			      default: 10
+
+	thresh_maybe <num> :  The number of times the host must not
+			      respond before autostatus marks it
+			      potentially down.
+
+			      default:  1
+
+	thresh_down <num>  :  The number of times the host must not
+			      respond before autostatus marks it
+			      confirmed down:
+
+			      default:  3
+
+			      (Thresh down must be >= thresh_maybe!)
+
+	custom_thresh  level, message, icon
+
+			      This is the most powerful way to configure
+			      alert notifications from autostatus.  Note
+			      that if you supply ANY custom_threshs,
+			      then the internal list of "up, maybe, down"
+			      is overridden completely.  That is, if you
+ 			      supply one, you need to supply them all,
+			      INCLUDING the level 0 "is up" notification.
+
+			      If you leave out the icon, autostatus will
+			      default to using the "down" icon.
+
+			      If you leave out the message, autostatus
+			      will default to using the "is down" message.
+
+			      Example:
+
+				custom_thresh 0, is back up, up.gif
+				custom_thresh 1, could be down, maybe.gif
+
+
+	debug <on or off>  :  Enable or disable debugging output.
+
+
+About flags to fping:
+
+	fpingflags allows you to change the number of pings 'fping' sends
+	or the timeout with the flags.
+
+	Normally, leave this blank.  However, you can use more bandwidth
+	and save some time if you set the parameters correctly.
+	The default is -t2500 -r3 -i25, which means:
+
+	 wait 2500 ms between retries
+	 retry three times
+	 wait at least 25ms between sending pings.
+
+	On a larger system, I use the settings:
+
+	  fpingflags -t1500 -r3 -i10
+
+
+	These settings reduce my 300 host (~1/2 dead) test file from
+	1:02 to 0:41.  However, really slow or lossy links will not
+	like these settings.  Uncrowded 128k or better, no problem.
+	(This will send about 4.3k/second)
+	Reducing -i to 10 took the time down further, to 34 seconds.
+	Remember, though, that packet loss will really kill you
+	by forcing more transmissions, so don't go overboard.
+
+
+The hosts file
+--------------
+The hosts file defines the resources to be monitored, and the people to
+be contacted in the event that they go down.  It also contains
+comments, and possibly HTML text which is included in the status
+webpage.  See the file "hosts.sample" for more information
+about the format of this file.
+
+ACKNOWLEDGEMENTS
+----------------
+Many thanks to the following people for suggestions, bug-finding, and
+patches.  (In alphabetical order)
+
+   Nate Carlson
+   Ewen McNeill
+   Steve Sawaya
+
+COPYRIGHT
+---------
+Official Copyright notice:
+
+##############################################################################
+Copyright (C) 1998,1999,2000 by David G. Andersen.  All rights reserved.
+This information is subject to change without notice and does not
+represent a commitment on the part of David G. Andersen.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in the
+   documentation and/or other materials provided with the distribution.
+3. The name of David G. Andersen may not
+   be used to endorse or promote products derived from this software
+   without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR
+IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES
+OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED.  
+IN NO EVENT SHALL DAVID G. ANDERSEN BE LIABLE FOR ANY DIRECT, INDIRECT,
+INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT
+NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
+THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
